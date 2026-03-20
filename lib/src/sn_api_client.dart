@@ -1,0 +1,1087 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:cookie_jar/cookie_jar.dart';
+import 'package:dio/dio.dart';
+import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+
+import 'models/post.dart';
+import 'models/session.dart';
+import 'models/sub.dart';
+import 'models/user.dart';
+import 'logger.dart';
+import 'storage.dart';
+
+const String _defaultBaseUrl = String.fromEnvironment(
+  'BASE_URL',
+  defaultValue: 'https://stacker.news',
+);
+
+final class SNApiClient {
+  final SnStorage _storage;
+  final SnLogger _logger;
+  final String _baseUrl;
+  late final Dio _dio;
+
+  SNApiClient({
+    SnStorage? storage,
+    SnLogger? logger,
+    String? baseUrl,
+  })  : _storage = storage ?? InMemoryStorage(),
+        _logger = logger ?? SnLogger(),
+        _baseUrl = baseUrl ?? _defaultBaseUrl {
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: '$_baseUrl/_next/data',
+        headers: {
+          'Accept': '*/*',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Content-Type': 'application/json',
+        },
+      ),
+    );
+
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          _logger.info('[API] Request: ${options.method} ${options.uri}');
+          _logger.debug('[API] Request Data: ${options.data}');
+          return handler.next(options);
+        },
+        onError: (error, handler) {
+          final statusCode = error.response?.statusCode;
+
+          if (statusCode == 403 || statusCode == 404) {
+            // Ignore 403 errors when unable to login with magic link
+            // Ignore 404 errors so we can update the build-id and re-fetch
+            handler.resolve(
+              Response(
+                requestOptions: error.requestOptions,
+                statusCode: statusCode,
+              ),
+            );
+          } else {
+            final requestUrl = error.requestOptions.uri.toString();
+            final requestMethod = error.requestOptions.method;
+            _logger.debug('=== DIO Error Interceptor ===');
+            _logger.debug('Status Code: $statusCode');
+            _logger.info('Request: $requestMethod $requestUrl');
+            _logger.error('Error Message: ${error.message}');
+            if (error.response?.data != null) {
+              _logger.debug('Response Data: ${error.response!.data}');
+            }
+            if (error.requestOptions.data != null) {
+              _logger.debug('Request Data: ${error.requestOptions.data}');
+            }
+            handler.next(error);
+          }
+        },
+      ),
+    );
+  }
+
+  /// Initializes cookie storage. If [cookiesPath] is provided a persistent
+  /// cookie jar is used; otherwise cookies are kept in memory only.
+  Future<void> init({String? cookiesPath}) async {
+    if (cookiesPath != null) {
+      final jar = PersistCookieJar(
+        ignoreExpires: true,
+        storage: FileStorage(cookiesPath),
+      );
+      _dio.interceptors.add(CookieManager(jar));
+    } else {
+      _dio.interceptors.add(CookieManager(CookieJar()));
+    }
+  }
+
+  // #region Posts
+  Map<String, dynamic> _getSortVariables(
+    String sortType, {
+    String? type,
+    String? by,
+    String? when,
+    DateTime? from,
+    DateTime? to,
+  }) {
+    switch (sortType.toUpperCase()) {
+      case 'NEW':
+        return {'sort': 'new'};
+      case 'TOP':
+        final vars = {
+          'sort': 'top',
+          'type': type ?? 'posts',
+          'when': when ?? 'day',
+        };
+        if (when == 'custom' && from != null && to != null) {
+          vars['from'] = from.toIso8601String();
+          vars['to'] = to.toIso8601String();
+        }
+        return vars;
+      case 'LIT':
+      default:
+        return {};
+    }
+  }
+
+  Future<List<Post>> fetchInitialPosts(
+    String subName, {
+    String sort = 'LIT',
+    String? type,
+    String? by,
+    String? when,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    try {
+      if (subName == 'home') {
+        return await _fetchHomeTimeline(
+          sort: sort,
+          type: type,
+          by: by,
+          when: when,
+          from: from,
+          to: to,
+        );
+      } else if (subName == 'notifications') {
+        return await _fetchNotifications();
+      }
+
+      final sortVars = _getSortVariables(sort, type: type, by: by, when: when, from: from, to: to);
+      final body = jsonDecode(
+        jsonEncode(
+          GqlBody(
+            operationName: 'SubItems',
+            variables: {
+              'includeComments': false,
+              'sub': subName,
+              ...sortVars,
+            },
+            query:
+                '''\n            fragment SubFields on Sub {\n              name\n              postTypes\n              allowFreebies\n              rankingType\n              billingType\n              billingCost\n              billingAutoRenew\n              billedLastAt\n              billPaidUntil\n              baseCost\n              userId\n              desc\n              status\n              meMuteSub\n              meSubscription\n              nsfw\n              __typename\n            }\n\n            fragment SubFullFields on Sub {\n              ...SubFields\n              user {\n                name\n                id\n                optional {\n                  streak\n                  __typename\n                }\n                __typename\n              }\n              __typename\n            }\n\n            fragment ItemFields on Item {\n              id\n              parentId\n              createdAt\n              deletedAt\n              title\n              url\n              user {\n                id\n                name\n                optional {\n                  streak\n                  __typename\n                }\n                meMute\n                __typename\n              }\n              sub {\n                name\n                userId\n                meMuteSub\n                meSubscription\n                nsfw\n                __typename\n              }\n              otsHash\n              position\n              sats\n              boost\n              bounty\n              bountyPaidTo\n              noteId\n              path\n              upvotes\n              meSats\n              meDontLikeSats\n              meBookmark\n              meSubscription\n              meForward\n              freebie\n              bio\n              ncomments\n              commentSats\n              lastCommentAt\n              isJob\n              company\n              location\n              remote\n              subName\n              pollCost\n              pollExpiresAt\n              status\n              uploadId\n              mine\n              imgproxyUrls\n              rel\n              __typename\n            }\n\n            fragment CommentItemExtFields on Item {\n              text\n              root {\n                id\n                title\n                bounty\n                bountyPaidTo\n                subName\n                sub {\n                  name\n                  userId\n                  meMuteSub\n                  __typename\n                }\n                user {\n                  name\n                  optional {\n                    streak\n                    __typename\n                  }\n                  id\n                  __typename\n                }\n                __typename\n              }\n              __typename\n            }\n\n            query SubItems(\$sub: String, \$sort: String, \$cursor: String, \$type: String, \$name: String, \$when: String, \$from: String, \$to: String, \$by: String, \$limit: Limit, \$includeComments: Boolean = false) {\n              sub(name: \$sub) {\n                ...SubFullFields\n                __typename\n              }\n              items(\n                sub: \$sub\n                sort: \$sort\n                cursor: \$cursor\n                type: \$type\n                name: \$name\n                when: \$when\n                from: \$from\n                to: \$to\n                by: \$by\n                limit: \$limit\n              ) {\n                cursor\n                items {\n                  ...ItemFields\n                  ...CommentItemExtFields @include(if: \$includeComments)\n                  position\n                  __typename\n                }\n                pins {\n                  ...ItemFields\n                  ...CommentItemExtFields @include(if: \$includeComments)\n                  position\n                  __typename\n                }\n                __typename\n              }\n            }\n          ''',
+          ),
+        ),
+      );
+
+      _logger.info('[API] POST $_baseUrl/api/graphql');
+      _logger.debug('[API] Request body: ${jsonEncode(body)}');
+
+      final response = await _dio.post(
+        '$_baseUrl/api/graphql',
+        data: body,
+      );
+
+      _logger.info('[API] Response status: ${response.statusCode}');
+      _logger.debug('[API] Response data: ${jsonEncode(response.data)}');
+
+      if (response.statusCode == 200) {
+        final errors = response.data?['errors'];
+        if (errors != null && errors is List && errors.isNotEmpty) {
+          final errorMsg = errors[0]?['message'] ?? 'Unknown GraphQL error';
+          _logger.error('[API] GraphQL Error: $errorMsg');
+          throw Exception('GraphQL Error: $errorMsg');
+        }
+
+        return await _parsePostsForSub(response.data, subName);
+      } else {
+        throw Exception('Error fetching posts: ${response.statusCode}');
+      }
+    } catch (e, st) {
+      _logger.error('[API] Error: $e', e, st);
+      rethrow;
+    }
+  }
+
+  Future<List<Post>> _parsePostsForSub(
+    dynamic responseData,
+    String subName,
+  ) async {
+    _logger.debug('[API] Parsing response for sub: $subName');
+    _logger.debug('[API] Response structure: ${responseData.runtimeType}');
+
+    final data = responseData['data'];
+    if (data == null) {
+      _logger.error('[API] ERROR: Missing data field. Full response: ${jsonEncode(responseData)}');
+      throw Exception('Invalid response: missing data field');
+    }
+
+    final itemsData = data['items'];
+    if (itemsData == null) {
+      _logger.error('[API] ERROR: Missing items field. Data keys: ${data.keys}');
+      throw Exception('Invalid response: missing items field');
+    }
+
+    _logger.debug('[API] Items data keys: ${itemsData.keys}');
+
+    final List items = itemsData['items'] ?? [];
+    _logger.info('[API] Extracted ${items.length} items for sub: $subName');
+
+    if (subName == 'home') {
+      final List? pins = itemsData['pins'];
+      if (pins != null && pins.isNotEmpty) {
+        for (final pin in pins) {
+          final position = pin['position'] as int?;
+          if (position != null && position < items.length) {
+            items.insert(position, pin);
+          }
+        }
+      }
+    }
+
+    final cursor = itemsData['cursor'];
+    if (cursor != null) {
+      await _storage.set('$subName-cursor', cursor.toString());
+    }
+
+    return items.map((item) {
+      return Post.fromJson(item as Map<String, dynamic>);
+    }).toList();
+  }
+
+  Future<List<Post>> _fetchHomeTimeline({
+    String sort = 'LIT',
+    String? type,
+    String? by,
+    String? when,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    try {
+      final sortVars = _getSortVariables(sort, type: type, by: by, when: when, from: from, to: to);
+      final body = jsonDecode(
+        jsonEncode(
+          GqlBody(
+            operationName: 'TopItems',
+            variables: {
+              ...sortVars,
+            },
+            query: '''
+              fragment ItemFields on Item {
+                id
+                parentId
+                createdAt
+                deletedAt
+                title
+                url
+                user {
+                  id
+                  name
+                  optional {
+                    streak
+                    __typename
+                  }
+                  meMute
+                  __typename
+                }
+                sub {
+                  name
+                  userId
+                  meMuteSub
+                  meSubscription
+                  nsfw
+                  __typename
+                }
+                otsHash
+                position
+                sats
+                boost
+                bounty
+                bountyPaidTo
+                noteId
+                path
+                upvotes
+                meSats
+                meDontLikeSats
+                meBookmark
+                meSubscription
+                meForward
+                freebie
+                bio
+                ncomments
+                commentSats
+                lastCommentAt
+                isJob
+                company
+                location
+                remote
+                subName
+                pollCost
+                pollExpiresAt
+                status
+                uploadId
+                mine
+                imgproxyUrls
+                rel
+                __typename
+              }
+              
+              query TopItems(\$sort: String, \$cursor: String, \$type: String, \$limit: Limit) {
+                items(
+                  sort: \$sort
+                  cursor: \$cursor
+                  type: \$type
+                  limit: \$limit
+                ) {
+                  cursor
+                  items {
+                    ...ItemFields
+                    __typename
+                  }
+                  pins {
+                    ...ItemFields
+                    position
+                    __typename
+                  }
+                  __typename
+                }
+              }
+            ''',
+          ),
+        ),
+      );
+
+      _logger.info('[API] POST $_baseUrl/api/graphql (home timeline)');
+      _logger.debug('[API] Request body: ${jsonEncode(body)}');
+
+      final response = await _dio.post(
+        '$_baseUrl/api/graphql',
+        data: body,
+      );
+
+      _logger.info('[API] Response status: ${response.statusCode}');
+      _logger.debug('[API] Response data: ${jsonEncode(response.data)}');
+
+      if (response.statusCode == 200) {
+        final errors = response.data?['errors'];
+        if (errors != null && errors is List && errors.isNotEmpty) {
+          final errorMsg = errors[0]?['message'] ?? 'Unknown GraphQL error';
+          _logger.error('[API] GraphQL Error: $errorMsg');
+          throw Exception('GraphQL Error: $errorMsg');
+        }
+
+        return await _parsePostsForSub(response.data, 'home');
+      } else {
+        throw Exception('Error fetching home timeline: ${response.statusCode}');
+      }
+    } catch (e, st) {
+      _logger.error('[API] Error fetching home timeline', e, st);
+      rethrow;
+    }
+  }
+
+  Future<void> _fetchAndSaveCurrBuildId() async {
+    final response = await _dio.get(_baseUrl);
+
+    if (response.statusCode != 200) {
+      throw Exception('Error fetching build id');
+    }
+
+    final regex = RegExp(r'\/_next\/static\/(\w+)\/_buildManifest.js');
+    final match = regex.firstMatch(response.data);
+
+    final buildId = match?.group(1);
+    if (buildId == null) {
+      throw Exception('Error parsing build id');
+    }
+
+    await _storage.set('build-id', buildId);
+  }
+
+  Future<String?> _getCurrBuildId() async {
+    return await _storage.getString('build-id');
+  }
+
+  Future<List<Post>> fetchMorePostsBySub(
+    String subName, {
+    String sort = 'LIT',
+    String? type,
+    String? by,
+    String? when,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final cursor = await _storage.getString('$subName-cursor');
+
+    if (cursor == null) {
+      throw Exception('Error fetching more: no cursor stored for "$subName"');
+    }
+
+    if (subName == 'notifications') {
+      return await _fetchNotifications(cursor: cursor);
+    }
+
+    try {
+      final sortVars = _getSortVariables(sort, type: type, by: by, when: when, from: from, to: to);
+      final body = jsonDecode(
+        jsonEncode(
+          GqlBody(
+            operationName: 'SubItems',
+            variables: {
+              'sub': subName == 'home' ? null : subName,
+              'cursor': cursor,
+              ...sortVars,
+            },
+            query: '''
+              query SubItems(\$sub: String, \$sort: String, \$cursor: String, \$type: String, \$name: String, \$when: String, \$from: String, \$to: String, \$by: String, \$limit: Limit) {
+                items(
+                  sub: \$sub
+                  sort: \$sort
+                  cursor: \$cursor
+                  type: \$type
+                  name: \$name
+                  when: \$when
+                  from: \$from
+                  to: \$to
+                  by: \$by
+                  limit: \$limit
+                ) {
+                  cursor
+                  items {
+                    id
+                    title
+                    url
+                    user { id name }
+                    sub { name }
+                    sats
+                    ncomments
+                    __typename
+                  }
+                  __typename
+                }
+              }
+            ''',
+          ),
+        ),
+      );
+
+      _logger.info('[API] POST $_baseUrl/api/graphql (pagination)');
+      _logger.debug('[API] Request body: ${jsonEncode(body)}');
+
+      final response = await _dio.post(
+        '$_baseUrl/api/graphql',
+        data: body,
+      );
+
+      _logger.info('[API] Response status: ${response.statusCode}');
+      _logger.debug('[API] Response data: ${jsonEncode(response.data)}');
+
+      if (response.statusCode == 200) {
+        return await _parsePostsForSub(response.data, subName);
+      }
+    } catch (e, st) {
+      _logger.error('[API] Error: $e', e, st);
+      rethrow;
+    }
+
+    throw Exception('Error fetching more posts');
+  }
+
+  Future<Post?> fetchPostDetails(String id) async {
+    String? currCommit = await _getCurrBuildId();
+
+    final response = await _dio.get('/$currCommit/items/$id.json');
+    if (response.statusCode != 200) {
+      if (response.statusCode == 404) {
+        await _fetchAndSaveCurrBuildId();
+
+        currCommit = await _getCurrBuildId();
+
+        final retryResponse = await _dio.get('/$currCommit/items/$id.json');
+
+        if (retryResponse.statusCode != 200) {
+          throw Exception('Error fetching post details');
+        }
+      } else {
+        throw Exception('Error parsing build id');
+      }
+    }
+
+    final props = response.data['pageProps'];
+    final data = (props['ssrData'] ?? props['data'])['item'];
+
+    try {
+      return Post.fromJson(data);
+    } catch (e, st) {
+      _logger.error('Error parsing post details', e, st);
+      throw Exception(e);
+    }
+  }
+  // #endregion Posts
+
+  // #region Profile
+  Future<User?> fetchMe() async {
+    final response = await _dio.post(
+      '$_baseUrl/api/graphql',
+      data: jsonEncode(
+        GqlBody(
+          variables: {},
+          query: '''
+            {
+              me {
+                id
+                name
+                bioId
+                photoId
+                privates {
+                  autoDropBolt11s
+                  diagnostics
+                  noReferralLinks
+                  fiatCurrency
+                  hideCowboyHat
+                  hideFromTopUsers
+                  hideGithub
+                  hideNostr
+                  hideTwitter
+                  hideInvoiceDesc
+                  imgproxyOnly
+                  nostrCrossposting
+                  noteAllDescendants
+                  noteCowboyHat
+                  noteDeposits
+                  noteWithdrawals
+                  noteEarning
+                  noteForwardedSats
+                  noteInvites
+                  noteItemSats
+                  noteMentions
+                  noteItemMentions
+                  sats
+                  tipDefault
+                  tipPopover
+                  turboTipping
+                  zapUndos
+                  upvotePopover
+                  autoWithdrawThreshold
+                  __typename
+                }
+                optional {
+                  isContributor
+                  stacked
+                  streak
+                  githubId
+                  nostrAuthPubkey
+                  twitterId
+                  __typename
+                }
+                __typename
+              }
+            }
+          ''',
+        ),
+      ),
+    );
+
+    if (response.statusCode != 200) {
+      _logger.error('ERRN01 Error fetching profile: ${response.data}');
+      return null;
+    }
+
+    final me = response.data?['data']?['me'];
+
+    if (me == null) {
+      _logger.error('ERRN02 Error fetching profile: ${response.data}');
+      return null;
+    }
+
+    await _storage.set('me', jsonEncode(me));
+
+    return User.fromJson(me);
+  }
+
+  Future<User> fetchProfile(String userName) async {
+    String? currCommit = await _getCurrBuildId();
+
+    final response = await _dio.get('/$currCommit/$userName.json?name=$userName');
+
+    if (response.statusCode == 200) {
+      return _parseProfile(response.data);
+    } else if (response.statusCode == 404) {
+      await _fetchAndSaveCurrBuildId();
+
+      currCommit = await _getCurrBuildId();
+
+      final retryResponse = await _dio.get('/$currCommit/$userName.json?name=$userName');
+
+      if (retryResponse.statusCode == 200) {
+        return _parseProfile(retryResponse.data);
+      } else {
+        throw Exception('Error fetching profile');
+      }
+    } else {
+      throw Exception('Error parsing build id');
+    }
+  }
+
+  User _parseProfile(dynamic responseData) {
+    final response = (responseData['pageProps'] ?? responseData);
+    final data = response['ssrData'] ?? response['data'];
+    final userMap = data['user'] as Map<String, dynamic>;
+
+    return User.fromJson(userMap);
+  }
+  // #endregion Profile
+
+  // #region Auth
+  Future<Session?> loginWithMagicCode({
+    required String email,
+    required String magicCode,
+  }) async {
+    if (magicCode.isEmpty) {
+      _logger.error('Error: Magic Code is empty');
+      return null;
+    }
+
+    try {
+      final callbackResponse = await _dio.get(
+        '$_baseUrl/api/auth/callback/email?callbackUrl=${Uri.encodeComponent(_baseUrl)}&token=$magicCode&email=${Uri.encodeComponent(email)}',
+        options: Options(
+          headers: {
+            'Accept':
+                'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Service-Worker-Navigation-Preload': 'true',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent':
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+            'sec-ch-prefers-color-scheme': 'dark',
+            'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Linux"',
+          },
+          followRedirects: false,
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      final location = callbackResponse.headers.value(HttpHeaders.locationHeader);
+      if (location == null) {
+        _logger.error('Error validating token: No redirect location');
+        return null;
+      }
+
+      if (location.contains('/api/auth/error?error=Verification')) {
+        final sessionData = await _storage.getString('session');
+        if (sessionData == null || sessionData == 'null' || sessionData == '{}') {
+          return null;
+        }
+
+        final session = Session.fromJson(jsonDecode(sessionData));
+        if (email != session.user?.email) {
+          return null;
+        }
+
+        return session;
+      }
+
+      final response = await _dio.get(
+        location,
+        options: Options(
+          headers: {
+            'Accept':
+                'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'User-Agent':
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+          },
+        ),
+      );
+
+      if (response.data is String && response.data.contains('This magic link has expired')) {
+        _logger.warning('This magic link has expired');
+        return null;
+      }
+
+      final sessionResponse = await _dio.get(
+        '$_baseUrl/api/auth/session',
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      if (sessionResponse.statusCode != 200) {
+        _logger.error(
+          'Error validating token (Expected sessionResponse.statusCode 200 but got ${sessionResponse.statusCode})',
+        );
+        return null;
+      }
+
+      if (sessionResponse.data == null || sessionResponse.data.isEmpty) {
+        _logger.error('Error validating token: Empty session data: ${sessionResponse.data}');
+        return null;
+      }
+
+      await _storage.set('session', jsonEncode(sessionResponse.data));
+
+      return Session.fromJson(sessionResponse.data);
+    } catch (e) {
+      _logger.error('Login failed: ${e.toString()}', e);
+      return null;
+    }
+  }
+
+  Future<bool> requestMagicToken(String email) async {
+    final csrfResponse = await _dio.get(
+      '$_baseUrl/api/auth/csrf',
+      options: Options(
+        headers: {'x-csrf-token': '1'},
+      ),
+    );
+
+    if (csrfResponse.statusCode != 200) {
+      _logger.error('Error fetching CSRF token');
+      return false;
+    }
+
+    final csrfToken = csrfResponse.data['csrfToken'];
+
+    final formData =
+        'email=${Uri.encodeComponent(email)}'
+        '&callbackUrl=${Uri.encodeComponent('$_baseUrl/')}'
+        '&multiAuth=false'
+        '&csrfToken=${Uri.encodeComponent(csrfToken)}'
+        '&json=true';
+
+    final response = await _dio.post(
+      '$_baseUrl/api/auth/signin/email',
+      data: formData,
+      options: Options(
+        contentType: 'application/x-www-form-urlencoded',
+        headers: {
+          'origin': _baseUrl,
+          'referer': '$_baseUrl/login?callbackUrl=${Uri.encodeComponent('$_baseUrl/')}',
+          'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138"',
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"Linux"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-origin',
+        },
+        followRedirects: false,
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 302) {
+      _logger.error('Failed with status: ${response.statusCode}');
+      return false;
+    }
+
+    return true;
+  }
+  // #endregion Auth
+
+  // #region Notifications
+  Future<bool> hasNewNotes() async {
+    _logger.debug('fetching hasNewNotes');
+
+    final response = await _dio.post(
+      '$_baseUrl/api/graphql',
+      data: jsonEncode(
+        GqlBody(
+          variables: {},
+          query: '''
+            {
+              hasNewNotes
+            }
+          ''',
+        ),
+      ),
+    );
+
+    if (response.statusCode == 200) {
+      final ret = response.data['data']?['hasNewNotes'] as bool?;
+      _logger.debug('hasNewNotes: $ret');
+      return ret == true;
+    }
+
+    _logger.debug('hasNewNotes: false, statusCode: ${response.statusCode}');
+    return false;
+  }
+
+  Future<List<Post>> _fetchNotifications({String? cursor}) async {
+    String? buildId = await _getCurrBuildId();
+    if (buildId == null) {
+      await _fetchAndSaveCurrBuildId();
+      buildId = await _getCurrBuildId();
+    }
+
+    final url = '/$buildId/notifications.json${cursor != null ? '?cursor=$cursor' : ''}';
+    _logger.info('[API] GET $url');
+
+    final response = await _dio.get(url);
+
+    if (response.statusCode == 200) {
+      return await _parseNotifications(response.data);
+    } else if (response.statusCode == 404) {
+      await _fetchAndSaveCurrBuildId();
+      buildId = await _getCurrBuildId();
+      final retryUrl = '/$buildId/notifications.json${cursor != null ? '?cursor=$cursor' : ''}';
+      final retryResponse = await _dio.get(retryUrl);
+
+      if (retryResponse.statusCode == 200) {
+        return await _parseNotifications(retryResponse.data);
+      }
+    }
+
+    throw Exception('Error fetching notifications: ${response.statusCode}');
+  }
+
+  Future<List<Post>> _parseNotifications(dynamic responseData) async {
+    final props = responseData['pageProps'];
+    final data = (props['ssrData'] ?? props['data'])['notifications'];
+
+    if (data == null) {
+      _logger.error('[API] ERROR: Missing notifications field.');
+      throw Exception('Invalid response: missing notifications field');
+    }
+
+    final List items = data['notifications'] ?? [];
+    final cursor = data['cursor']?.toString();
+
+    _logger.debug('[API] Extracted ${items.length} notifications');
+
+    if (cursor != null) {
+      await _storage.set('notifications-cursor', cursor);
+    }
+
+    return items.map((item) {
+      return Post.fromJson(item as Map<String, dynamic>);
+    }).toList();
+  }
+  // #endregion Notifications
+
+  // #region Zap Things
+  Future<int?> zapPost(String id) async {
+    final me = await fetchMe();
+
+    if (me == null) {
+      _logger.error('Error fetching me');
+      return 0;
+    }
+
+    final sats = me.tipDefault ?? 1;
+
+    final response = await _dio.post(
+      '$_baseUrl/api/graphql',
+      data: jsonEncode(
+        GqlBody(
+          operationName: 'Act',
+          variables: {
+            'id': id,
+            'sats': sats,
+          },
+          query: '''
+            mutation Act(\$id: ID!, \$sats: Int!) {
+              act(id: \$id, sats: \$sats) {
+                id
+              }
+            }
+          ''',
+        ),
+      ),
+    );
+
+    if (response.statusCode == 200) {
+      final errors = (response.data['errors'] ?? []) as List;
+      final error = errors.isEmpty ? null : errors[0]?['message'];
+
+      if (error != null) {
+        _logger.error('zap error: $error');
+        return null;
+      }
+
+      return sats;
+    }
+
+    return 0;
+  }
+  // #endregion Zap Things
+
+  // #region Items & Comments
+  Future<Post?> upsertDiscussion({
+    required String sub,
+    required String title,
+    required String text,
+  }) async {
+    title = title.replaceAll('\n', '\\n');
+    text = text.replaceAll('\n', '\\n');
+
+    final response = await _dio.post(
+      '$_baseUrl/api/graphql',
+      data: jsonEncode(
+        GqlBody(
+          operationName: 'upsertDiscussion',
+          variables: {
+            'sub': sub,
+            'title': title,
+            'text': text,
+            'forward': [],
+          },
+          query: '''
+            mutation upsertDiscussion(
+              \$sub: String
+              \$id: ID
+              \$title: String!
+              \$text: String
+              \$boost: Int
+              \$forward: [ItemForwardInput]
+              \$hash: String
+              \$hmac: String
+            ) {
+              upsertDiscussion(
+                sub: \$sub
+                id: \$id
+                title: \$title
+                text: \$text
+                boost: \$boost
+                forward: \$forward
+                hash: \$hash
+                hmac: \$hmac
+              ) {
+                id
+                __typename
+              }
+            }
+          ''',
+        ),
+      ),
+    );
+
+    if (response.statusCode == 200) {
+      final errors = (response.data['errors'] ?? []) as List;
+      final error = errors.isEmpty ? null : errors[0]?['message'];
+
+      if (error != null) {
+        _logger.error('upsertDiscussion error: $error');
+        throw Exception(error);
+      }
+
+      return Post.fromJson(response.data);
+    }
+
+    throw Exception('Failed to post discussion');
+  }
+
+  Future<Post?> upsertComment({
+    required String parentId,
+    required String text,
+  }) async {
+    text = text.replaceAll('\n', '\\n');
+
+    final response = await _dio.post(
+      '$_baseUrl/api/graphql',
+      options: Options(
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      ),
+      data: jsonEncode(
+        GqlBody(
+          operationName: 'upsertComment',
+          variables: {
+            'parentId': parentId,
+            'text': text,
+          },
+          query: '''
+            mutation upsertComment(\$parentId: ID!, \$text: String!) {
+              upsertComment(parentId: \$parentId, text: \$text) {
+                __typename
+              }
+            }
+          ''',
+        ),
+      ),
+    );
+
+    if (response.statusCode == 200) {
+      final errors = (response.data['errors'] ?? []) as List;
+      final error = errors.isEmpty ? null : errors[0]?['message'];
+
+      if (error != null) {
+        _logger.error('upsertComment error: $error');
+        throw Exception(error);
+      }
+
+      return Post.fromJson(response.data);
+    }
+
+    throw Exception('Failed to create comment');
+  }
+  // #endregion Items & Comments
+
+  // #region Subs
+  Future<List<Sub>> fetchActiveSubs() async {
+    try {
+      final requestBody = GqlBody(
+        operationName: 'ActiveSubs',
+        variables: {},
+        query: '''
+          query ActiveSubs {
+            activeSubs {
+              name
+              desc
+              nsfw
+              meMuteSub
+            }
+          }
+        ''',
+      );
+
+      _logger.info('[API] POST $_baseUrl/api/graphql (fetchActiveSubs)');
+      _logger.debug('[API] Request: ${jsonEncode(requestBody.toJson())}');
+
+      final response = await _dio.post(
+        '$_baseUrl/api/graphql',
+        data: jsonEncode(requestBody),
+      );
+
+      _logger.info('[API] Response status: ${response.statusCode}');
+      _logger.debug('[API] Response data: ${jsonEncode(response.data)}');
+
+      if (response.statusCode != 200) {
+        _logger.error('Error fetching active subs: ${response.statusCode}');
+        return [];
+      }
+
+      final errors = (response.data['errors'] ?? []) as List;
+      if (errors.isNotEmpty) {
+        _logger.error('GraphQL error: ${errors[0]?['message']}');
+        return [];
+      }
+
+      final subsData = response.data['data']?['activeSubs'] as List?;
+      if (subsData == null) {
+        return [];
+      }
+
+      return subsData.map((sub) => Sub.fromJson(sub as Map<String, dynamic>)).toList();
+    } catch (e, st) {
+      _logger.error('Error fetching active subs', e, st);
+      return [];
+    }
+  }
+  // #endregion Subs
+}
+
+class GqlBody {
+  final String? operationName;
+  final String? query;
+  final Map<String, dynamic>? variables;
+
+  GqlBody({
+    this.operationName,
+    this.query,
+    this.variables,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'operationName': operationName,
+    'query': query,
+    'variables': variables,
+  };
+}
+
+class GqlError {
+  final String? message;
+
+  GqlError({this.message});
+}
