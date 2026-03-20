@@ -45,6 +45,7 @@ final class Post {
   final Post? item;
   final Post? root;
   final int? earnedSats;
+  final String? sortTime;
 
   Post({
     this.typeName,
@@ -89,6 +90,7 @@ final class Post {
     this.item,
     this.root,
     this.earnedSats,
+    this.sortTime,
   });
 
   factory Post.fromJson(Map<String, dynamic> json) {
@@ -137,6 +139,7 @@ final class Post {
       item: json['item'] == null ? null : Post.fromJson(json['item']),
       root: json['root'] == null ? null : Post.fromJson(json['root']),
       earnedSats: json['earnedSats'],
+      sortTime: json['sortTime'],
     );
   }
 
@@ -190,6 +193,7 @@ final class Post {
     final Post? item,
     final Post? root,
     final int? earnedSats,
+    final String? sortTime,
   }) {
     return Post(
       typeName: typeName ?? this.typeName,
@@ -234,6 +238,7 @@ final class Post {
       item: item ?? this.item,
       root: root ?? this.root,
       earnedSats: earnedSats ?? this.earnedSats,
+      sortTime: sortTime ?? this.sortTime,
     );
   }
 }

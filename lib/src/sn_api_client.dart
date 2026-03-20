@@ -5,6 +5,7 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 
+import 'models/notification_result.dart';
 import 'models/post.dart';
 import 'models/session.dart';
 import 'models/sub.dart';
@@ -797,7 +798,27 @@ final class SNApiClient {
     return false;
   }
 
+  /// Fetches the first page of notifications with [lastChecked] metadata.
+  /// The server automatically marks notifications as seen on first-page fetch.
+  Future<NotificationResult> fetchNotifications() async {
+    return await _fetchNotificationsRaw();
+  }
+
+  /// Fetches the next page of notifications using the stored cursor.
+  Future<NotificationResult> fetchMoreNotifications() async {
+    final cursor = await _storage.getString('notifications-cursor');
+    if (cursor == null) {
+      throw Exception('Error fetching more: no cursor stored for "notifications"');
+    }
+    return await _fetchNotificationsRaw(cursor: cursor);
+  }
+
   Future<List<Post>> _fetchNotifications({String? cursor}) async {
+    final result = await _fetchNotificationsRaw(cursor: cursor);
+    return result.notifications;
+  }
+
+  Future<NotificationResult> _fetchNotificationsRaw({String? cursor}) async {
     String? buildId = await _getCurrBuildId();
     if (buildId == null) {
       await _fetchAndSaveCurrBuildId();
@@ -825,7 +846,7 @@ final class SNApiClient {
     throw Exception('Error fetching notifications: ${response.statusCode}');
   }
 
-  Future<List<Post>> _parseNotifications(dynamic responseData) async {
+  Future<NotificationResult> _parseNotifications(dynamic responseData) async {
     final props = responseData['pageProps'];
     final data = (props['ssrData'] ?? props['data'])['notifications'];
 
@@ -836,16 +857,28 @@ final class SNApiClient {
 
     final List items = data['notifications'] ?? [];
     final cursor = data['cursor']?.toString();
+    final lastCheckedRaw = data['lastChecked']?.toString();
 
-    _logger.debug('[API] Extracted ${items.length} notifications');
+    _logger.debug('[API] Extracted ${items.length} notifications, lastChecked=$lastCheckedRaw');
 
     if (cursor != null) {
       await _storage.set('notifications-cursor', cursor);
     }
 
-    return items.map((item) {
+    final notifications = items.map((item) {
       return Post.fromJson(item as Map<String, dynamic>);
     }).toList();
+
+    DateTime? lastChecked;
+    if (lastCheckedRaw != null) {
+      lastChecked = DateTime.tryParse(lastCheckedRaw);
+    }
+
+    return NotificationResult(
+      lastChecked: lastChecked,
+      cursor: cursor,
+      notifications: notifications,
+    );
   }
   // #endregion Notifications
 
