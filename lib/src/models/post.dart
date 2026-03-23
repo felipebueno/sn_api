@@ -1,5 +1,6 @@
 import 'package:timeago/timeago.dart' as ta;
 
+import 'sub.dart';
 import 'user.dart';
 
 final class Post {
@@ -7,56 +8,83 @@ final class Post {
   final String? id;
   final int? parentId;
   final String? createdAt;
+  final String? updatedAt;
   final String? deletedAt;
+  final String? deleteScheduledAt;
+  final String? reminderScheduledAt;
   final String? title;
+  final String? searchTitle;
   final String? url;
-  final int? fwdUserId;
-  final String? otsHash;
-  final int? position;
-  final int? sats;
+  final String? searchText;
+  final String? text;
+  final String? lexicalState;
+  final String? html;
+  final Post? parent;
+  final Post? root;
+  final User? user;
+  final int? userId;
+  final int? depth;
+  final bool? mine;
   final int? boost;
   final int? bounty;
-  final List<dynamic>? bountyPaidTo;
-  final int? noteId;
-  final String? path;
+  final List<int>? bountyPaidTo;
+  final String? noteId;
+  final int? sats;
+  final int? downSats;
+  final int? credits;
+  final int? commentSats;
+  final int? commentCredits;
+  final int? commentCost;
+  final int? commentBoost;
+  final int? commentDownSats;
+  final String? lastCommentAt;
   final int? upvotes;
   final int? meSats;
-  final bool? meDontLike;
+  final int? meCredits;
+  final int? meDontLikeSats;
   final bool? meBookmark;
   final bool? meSubscription;
   final bool? meForward;
-  final bool? outlawed;
   final bool? freebie;
-  final String? bio;
+  final int? netInvestment;
+  final bool? freedFreebie;
+  final bool? bio;
   final int? ncomments;
-  final int? commentSats;
-  final String? lastCommentAt;
-  final int? maxBid;
+  final int? nDirectComments;
+  final List<Post>? comments;
+  final String? path;
+  final int? position;
+  final int? prior;
   final bool? isJob;
+  final int? pollCost;
+  final Map<String, dynamic>? poll;
+  final String? pollExpiresAt;
   final String? company;
   final String? location;
   final bool? remote;
+  final Sub? sub;
   final String? subName;
-  final Map<String, dynamic>? sub;
-  final List<dynamic>? subs;
-  final int? pollCost;
-  final String? pollExpiresAt;
+  final List<Sub>? subs;
+  final List<String>? subNames;
   final String? status;
   final int? uploadId;
-  final bool? mine;
-  final int? credits;
-  final List<dynamic>? forwards;
-  final List<dynamic>? imgproxyUrls;
+  final String? otsHash;
+  final String? parentOtsHash;
+  final List<Map<String, dynamic>>? forwards;
+  final Map<String, dynamic>? imgproxyUrls;
   final String? rel;
-  final User? user;
-  final String? text;
-  final List<Post>? comments;
+  final bool? apiKey;
+  final int? cost;
+  final Map<String, dynamic>? payIn;
+  final String? meCommentsViewedAt;
+  final int? fwdUserId;
+  final bool? meDontLike;
+  final bool? outlawed;
+  final int? maxBid;
   final String? pageTitle;
   final Post? item;
   final Post? payInItem;
-  final Map<String, dynamic>? payIn;
   final Map<String, dynamic>? bulletin;
-  final Post? root;
   final int? days;
   final String? minSortTime;
   final String? mention;
@@ -71,56 +99,83 @@ final class Post {
     this.id,
     this.parentId,
     this.createdAt,
+    this.updatedAt,
     this.deletedAt,
+    this.deleteScheduledAt,
+    this.reminderScheduledAt,
     this.title,
+    this.searchTitle,
     this.url,
-    this.fwdUserId,
-    this.otsHash,
-    this.position,
-    this.sats,
+    this.searchText,
+    this.text,
+    this.lexicalState,
+    this.html,
+    this.parent,
+    this.root,
+    this.user,
+    this.userId,
+    this.depth,
+    this.mine,
     this.boost,
     this.bounty,
     this.bountyPaidTo,
     this.noteId,
-    this.path,
+    this.sats,
+    this.downSats,
+    this.credits,
+    this.commentSats,
+    this.commentCredits,
+    this.commentCost,
+    this.commentBoost,
+    this.commentDownSats,
+    this.lastCommentAt,
     this.upvotes,
     this.meSats,
-    this.meDontLike,
+    this.meCredits,
+    this.meDontLikeSats,
     this.meBookmark,
     this.meSubscription,
     this.meForward,
-    this.outlawed,
     this.freebie,
+    this.netInvestment,
+    this.freedFreebie,
     this.bio,
     this.ncomments,
-    this.commentSats,
-    this.lastCommentAt,
-    this.maxBid,
+    this.nDirectComments,
+    this.comments,
+    this.path,
+    this.position,
+    this.prior,
     this.isJob,
+    this.pollCost,
+    this.poll,
+    this.pollExpiresAt,
     this.company,
     this.location,
     this.remote,
-    this.subName,
     this.sub,
+    this.subName,
     this.subs,
-    this.pollCost,
-    this.pollExpiresAt,
+    this.subNames,
     this.status,
     this.uploadId,
-    this.mine,
-    this.credits,
+    this.otsHash,
+    this.parentOtsHash,
     this.forwards,
     this.imgproxyUrls,
     this.rel,
-    this.user,
-    this.text,
-    this.comments,
+    this.apiKey,
+    this.cost,
+    this.payIn,
+    this.meCommentsViewedAt,
+    this.fwdUserId,
+    this.meDontLike,
+    this.outlawed,
+    this.maxBid,
     this.pageTitle,
     this.item,
     this.payInItem,
-    this.payIn,
     this.bulletin,
-    this.root,
     this.days,
     this.minSortTime,
     this.mention,
@@ -133,74 +188,115 @@ final class Post {
 
   factory Post.fromJson(Map<String, dynamic> json) {
     return Post(
-      typeName: json['__typename'],
-      id: json['id'],
-      parentId: json['parentId'],
-      createdAt: json['createdAt'],
-      deletedAt: json['deletedAt'],
-      title: json['title'],
-      url: json['url'],
-      fwdUserId: json['fwdUserId'],
-      otsHash: json['otsHash'],
-      position: json['position'],
-      sats: json['sats'],
-      boost: json['boost'],
-      bounty: json['bounty'],
-      bountyPaidTo: json['bountyPaidTo'],
-      noteId: json['noteId'],
-      path: json['path'],
-      upvotes: json['upvotes'],
-      meSats: json['meSats'],
-      meDontLike: json['meDontLike'],
-      meBookmark: json['meBookmark'],
-      meSubscription: json['meSubscription'],
-      meForward: json['meForward'],
-      outlawed: json['outlawed'],
-      freebie: json['freebie'],
-      bio: json['bio'],
-      ncomments: json['ncomments'],
-      commentSats: json['commentSats'],
-      lastCommentAt: json['lastCommentAt'],
-      maxBid: json['maxBid'],
-      isJob: json['isJob'],
-      company: json['company'],
-      location: json['location'],
-      remote: json['remote'],
-      subName: json['subName'],
-      sub: json['sub'] is Map ? Map<String, dynamic>.from(json['sub'] as Map) : null,
-      subs: json['subs'] as List?,
-      pollCost: json['pollCost'],
-      pollExpiresAt: json['pollExpiresAt'],
-      status: json['status'],
-      uploadId: json['uploadId'],
-      mine: json['mine'],
-      credits: json['credits'],
-      forwards: json['forwards'] as List?,
-      imgproxyUrls: json['imgproxyUrls'] as List?,
-      rel: json['rel'],
-      user: json['user'] == null ? null : User.fromJson(json['user']),
-      text: json['text'],
+      typeName: json['__typename'] as String?,
+      id: json['id'] as String?,
+      parentId: json['parentId'] as int?,
+      createdAt: json['createdAt'] as String?,
+      updatedAt: json['updatedAt'] as String?,
+      deletedAt: json['deletedAt'] as String?,
+      deleteScheduledAt: json['deleteScheduledAt'] as String?,
+      reminderScheduledAt: json['reminderScheduledAt'] as String?,
+      title: json['title'] as String?,
+      searchTitle: json['searchTitle'] as String?,
+      url: json['url'] as String?,
+      searchText: json['searchText'] as String?,
+      text: json['text'] as String?,
+      lexicalState: json['lexicalState'] as String?,
+      html: json['html'] as String?,
+      parent: json['parent'] == null
+          ? null
+          : Post.fromJson(json['parent'] as Map<String, dynamic>),
+      root: json['root'] == null
+          ? null
+          : Post.fromJson(json['root'] as Map<String, dynamic>),
+      user: json['user'] == null
+          ? null
+          : User.fromJson(json['user'] as Map<String, dynamic>),
+      userId: json['userId'] as int?,
+      depth: json['depth'] as int?,
+      mine: json['mine'] as bool?,
+      boost: json['boost'] as int?,
+      bounty: json['bounty'] as int?,
+      bountyPaidTo: (json['bountyPaidTo'] as List?)?.cast<int>(),
+      noteId: json['noteId'] as String?,
+      sats: json['sats'] as int?,
+      downSats: json['downSats'] as int?,
+      credits: json['credits'] as int?,
+      commentSats: json['commentSats'] as int?,
+      commentCredits: json['commentCredits'] as int?,
+      commentCost: json['commentCost'] as int?,
+      commentBoost: json['commentBoost'] as int?,
+      commentDownSats: json['commentDownSats'] as int?,
+      lastCommentAt: json['lastCommentAt'] as String?,
+      upvotes: json['upvotes'] as int?,
+      meSats: json['meSats'] as int?,
+      meCredits: json['meCredits'] as int?,
+      meDontLikeSats: json['meDontLikeSats'] as int?,
+      meBookmark: json['meBookmark'] as bool?,
+      meSubscription: json['meSubscription'] as bool?,
+      meForward: json['meForward'] as bool?,
+      freebie: json['freebie'] as bool?,
+      netInvestment: json['netInvestment'] as int?,
+      freedFreebie: json['freedFreebie'] as bool?,
+      bio: json['bio'] as bool?,
+      ncomments: json['ncomments'] as int?,
+      nDirectComments: json['nDirectComments'] as int?,
       comments: json['comments'] != null && json['comments']['comments'] != null
-          ? (json['comments']['comments'] as List).map((i) => Post.fromJson(i)).toList()
+          ? (json['comments']['comments'] as List)
+              .map((e) => Post.fromJson(e as Map<String, dynamic>))
+              .toList()
           : null,
-      pageTitle: json['pageTitle'],
-      item: json['item'] == null ? null : Post.fromJson(json['item']),
-      payInItem: json['payInItem'] == null ? null : Post.fromJson(json['payInItem']),
-      payIn: json['payIn'] is Map
-          ? Map<String, dynamic>.from(json['payIn'] as Map)
-          : null,
-      bulletin: json['bulletin'] is Map
-          ? Map<String, dynamic>.from(json['bulletin'] as Map)
-          : null,
-      root: json['root'] == null ? null : Post.fromJson(json['root']),
-      days: json['days'],
-      minSortTime: json['minSortTime'],
-      mention: json['mention'],
-      invite: json['invite'] is Map ? Map<String, dynamic>.from(json['invite'] as Map) : null,
-      source: json['source'] is Map ? Map<String, dynamic>.from(json['source'] as Map) : null,
-      sources: json['sources'] is Map ? Map<String, dynamic>.from(json['sources'] as Map) : null,
-      earnedSats: json['earnedSats'],
-      sortTime: json['sortTime'],
+      path: json['path'] as String?,
+      position: json['position'] as int?,
+      prior: json['prior'] as int?,
+      isJob: json['isJob'] as bool?,
+      pollCost: json['pollCost'] as int?,
+      poll: json['poll'] as Map<String, dynamic>?,
+      pollExpiresAt: json['pollExpiresAt'] as String?,
+      company: json['company'] as String?,
+      location: json['location'] as String?,
+      remote: json['remote'] as bool?,
+      sub: json['sub'] == null
+          ? null
+          : Sub.fromJson(json['sub'] as Map<String, dynamic>),
+      subName: json['subName'] as String?,
+      subs: (json['subs'] as List?)
+          ?.map((e) => Sub.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      subNames: (json['subNames'] as List?)?.cast<String>(),
+      status: json['status'] as String?,
+      uploadId: json['uploadId'] as int?,
+      otsHash: json['otsHash'] as String?,
+      parentOtsHash: json['parentOtsHash'] as String?,
+      forwards: (json['forwards'] as List?)
+          ?.map((e) => e as Map<String, dynamic>)
+          .toList(),
+      imgproxyUrls: json['imgproxyUrls'] as Map<String, dynamic>?,
+      rel: json['rel'] as String?,
+      apiKey: json['apiKey'] as bool?,
+      cost: json['cost'] as int?,
+      payIn: json['payIn'] as Map<String, dynamic>?,
+      meCommentsViewedAt: json['meCommentsViewedAt'] as String?,
+      fwdUserId: json['fwdUserId'] as int?,
+      meDontLike: json['meDontLike'] as bool?,
+      outlawed: json['outlawed'] as bool?,
+      maxBid: json['maxBid'] as int?,
+      pageTitle: json['pageTitle'] as String?,
+      item: json['item'] == null
+          ? null
+          : Post.fromJson(json['item'] as Map<String, dynamic>),
+      payInItem: json['payInItem'] == null
+          ? null
+          : Post.fromJson(json['payInItem'] as Map<String, dynamic>),
+      bulletin: json['bulletin'] as Map<String, dynamic>?,
+      days: json['days'] as int?,
+      minSortTime: json['minSortTime'] as String?,
+      mention: json['mention'] as String?,
+      invite: json['invite'] as Map<String, dynamic>?,
+      source: json['source'] as Map<String, dynamic>?,
+      sources: json['sources'] as Map<String, dynamic>?,
+      earnedSats: json['earnedSats'] as int?,
+      sortTime: json['sortTime'] as String?,
     );
   }
 
@@ -212,124 +308,178 @@ final class Post {
   }
 
   Post copyWith({
-    final String? typeName,
-    final String? id,
-    final int? parentId,
-    final String? createdAt,
-    final String? deletedAt,
-    final String? title,
-    final String? url,
-    final int? fwdUserId,
-    final String? otsHash,
-    final int? position,
-    final int? sats,
-    final int? boost,
-    final int? bounty,
-    final List<dynamic>? bountyPaidTo,
-    final int? noteId,
-    final String? path,
-    final int? upvotes,
-    final int? meSats,
-    final bool? meDontLike,
-    final bool? meBookmark,
-    final bool? meSubscription,
-    final bool? meForward,
-    final bool? outlawed,
-    final bool? freebie,
-    final String? bio,
-    final int? ncomments,
-    final int? commentSats,
-    final String? lastCommentAt,
-    final int? maxBid,
-    final bool? isJob,
-    final String? company,
-    final String? location,
-    final bool? remote,
-    final String? subName,
-    final Map<String, dynamic>? sub,
-    final List<dynamic>? subs,
-    final int? pollCost,
-    final String? pollExpiresAt,
-    final String? status,
-    final int? uploadId,
-    final bool? mine,
-    final int? credits,
-    final List<dynamic>? forwards,
-    final List<dynamic>? imgproxyUrls,
-    final String? rel,
-    final User? user,
-    final String? text,
-    final List<Post>? comments,
-    final String? pageTitle,
-    final Post? item,
-    final Post? payInItem,
-    final Map<String, dynamic>? payIn,
-    final Map<String, dynamic>? bulletin,
-    final Post? root,
-    final int? days,
-    final String? minSortTime,
-    final String? mention,
-    final Map<String, dynamic>? invite,
-    final Map<String, dynamic>? source,
-    final Map<String, dynamic>? sources,
-    final int? earnedSats,
-    final String? sortTime,
+    String? typeName,
+    String? id,
+    int? parentId,
+    String? createdAt,
+    String? updatedAt,
+    String? deletedAt,
+    String? deleteScheduledAt,
+    String? reminderScheduledAt,
+    String? title,
+    String? searchTitle,
+    String? url,
+    String? searchText,
+    String? text,
+    String? lexicalState,
+    String? html,
+    Post? parent,
+    Post? root,
+    User? user,
+    int? userId,
+    int? depth,
+    bool? mine,
+    int? boost,
+    int? bounty,
+    List<int>? bountyPaidTo,
+    String? noteId,
+    int? sats,
+    int? downSats,
+    int? credits,
+    int? commentSats,
+    int? commentCredits,
+    int? commentCost,
+    int? commentBoost,
+    int? commentDownSats,
+    String? lastCommentAt,
+    int? upvotes,
+    int? meSats,
+    int? meCredits,
+    int? meDontLikeSats,
+    bool? meBookmark,
+    bool? meSubscription,
+    bool? meForward,
+    bool? freebie,
+    int? netInvestment,
+    bool? freedFreebie,
+    bool? bio,
+    int? ncomments,
+    int? nDirectComments,
+    List<Post>? comments,
+    String? path,
+    int? position,
+    int? prior,
+    bool? isJob,
+    int? pollCost,
+    Map<String, dynamic>? poll,
+    String? pollExpiresAt,
+    String? company,
+    String? location,
+    bool? remote,
+    Sub? sub,
+    String? subName,
+    List<Sub>? subs,
+    List<String>? subNames,
+    String? status,
+    int? uploadId,
+    String? otsHash,
+    String? parentOtsHash,
+    List<Map<String, dynamic>>? forwards,
+    Map<String, dynamic>? imgproxyUrls,
+    String? rel,
+    bool? apiKey,
+    int? cost,
+    Map<String, dynamic>? payIn,
+    String? meCommentsViewedAt,
+    int? fwdUserId,
+    bool? meDontLike,
+    bool? outlawed,
+    int? maxBid,
+    String? pageTitle,
+    Post? item,
+    Post? payInItem,
+    Map<String, dynamic>? bulletin,
+    int? days,
+    String? minSortTime,
+    String? mention,
+    Map<String, dynamic>? invite,
+    Map<String, dynamic>? source,
+    Map<String, dynamic>? sources,
+    int? earnedSats,
+    String? sortTime,
   }) {
     return Post(
       typeName: typeName ?? this.typeName,
       id: id ?? this.id,
       parentId: parentId ?? this.parentId,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
+      deleteScheduledAt: deleteScheduledAt ?? this.deleteScheduledAt,
+      reminderScheduledAt: reminderScheduledAt ?? this.reminderScheduledAt,
       title: title ?? this.title,
+      searchTitle: searchTitle ?? this.searchTitle,
       url: url ?? this.url,
-      fwdUserId: fwdUserId ?? this.fwdUserId,
-      otsHash: otsHash ?? this.otsHash,
-      position: position ?? this.position,
-      sats: sats ?? this.sats,
+      searchText: searchText ?? this.searchText,
+      text: text ?? this.text,
+      lexicalState: lexicalState ?? this.lexicalState,
+      html: html ?? this.html,
+      parent: parent ?? this.parent,
+      root: root ?? this.root,
+      user: user ?? this.user,
+      userId: userId ?? this.userId,
+      depth: depth ?? this.depth,
+      mine: mine ?? this.mine,
       boost: boost ?? this.boost,
       bounty: bounty ?? this.bounty,
       bountyPaidTo: bountyPaidTo ?? this.bountyPaidTo,
       noteId: noteId ?? this.noteId,
-      path: path ?? this.path,
+      sats: sats ?? this.sats,
+      downSats: downSats ?? this.downSats,
+      credits: credits ?? this.credits,
+      commentSats: commentSats ?? this.commentSats,
+      commentCredits: commentCredits ?? this.commentCredits,
+      commentCost: commentCost ?? this.commentCost,
+      commentBoost: commentBoost ?? this.commentBoost,
+      commentDownSats: commentDownSats ?? this.commentDownSats,
+      lastCommentAt: lastCommentAt ?? this.lastCommentAt,
       upvotes: upvotes ?? this.upvotes,
       meSats: meSats ?? this.meSats,
-      meDontLike: meDontLike ?? this.meDontLike,
+      meCredits: meCredits ?? this.meCredits,
+      meDontLikeSats: meDontLikeSats ?? this.meDontLikeSats,
       meBookmark: meBookmark ?? this.meBookmark,
       meSubscription: meSubscription ?? this.meSubscription,
       meForward: meForward ?? this.meForward,
-      outlawed: outlawed ?? this.outlawed,
       freebie: freebie ?? this.freebie,
+      netInvestment: netInvestment ?? this.netInvestment,
+      freedFreebie: freedFreebie ?? this.freedFreebie,
       bio: bio ?? this.bio,
       ncomments: ncomments ?? this.ncomments,
-      commentSats: commentSats ?? this.commentSats,
-      lastCommentAt: lastCommentAt ?? this.lastCommentAt,
-      maxBid: maxBid ?? this.maxBid,
+      nDirectComments: nDirectComments ?? this.nDirectComments,
+      comments: comments ?? this.comments,
+      path: path ?? this.path,
+      position: position ?? this.position,
+      prior: prior ?? this.prior,
       isJob: isJob ?? this.isJob,
+      pollCost: pollCost ?? this.pollCost,
+      poll: poll ?? this.poll,
+      pollExpiresAt: pollExpiresAt ?? this.pollExpiresAt,
       company: company ?? this.company,
       location: location ?? this.location,
       remote: remote ?? this.remote,
-      subName: subName ?? this.subName,
       sub: sub ?? this.sub,
+      subName: subName ?? this.subName,
       subs: subs ?? this.subs,
-      pollCost: pollCost ?? this.pollCost,
-      pollExpiresAt: pollExpiresAt ?? this.pollExpiresAt,
+      subNames: subNames ?? this.subNames,
       status: status ?? this.status,
       uploadId: uploadId ?? this.uploadId,
-      mine: mine ?? this.mine,
-      credits: credits ?? this.credits,
+      otsHash: otsHash ?? this.otsHash,
+      parentOtsHash: parentOtsHash ?? this.parentOtsHash,
       forwards: forwards ?? this.forwards,
       imgproxyUrls: imgproxyUrls ?? this.imgproxyUrls,
       rel: rel ?? this.rel,
-      user: user ?? this.user,
-      text: text ?? this.text,
-      comments: comments ?? this.comments,
+      apiKey: apiKey ?? this.apiKey,
+      cost: cost ?? this.cost,
+      payIn: payIn ?? this.payIn,
+      meCommentsViewedAt: meCommentsViewedAt ?? this.meCommentsViewedAt,
+      fwdUserId: fwdUserId ?? this.fwdUserId,
+      meDontLike: meDontLike ?? this.meDontLike,
+      outlawed: outlawed ?? this.outlawed,
+      maxBid: maxBid ?? this.maxBid,
       pageTitle: pageTitle ?? this.pageTitle,
       item: item ?? this.item,
       payInItem: payInItem ?? this.payInItem,
-      payIn: payIn ?? this.payIn,
       bulletin: bulletin ?? this.bulletin,
-      root: root ?? this.root,
       days: days ?? this.days,
       minSortTime: minSortTime ?? this.minSortTime,
       mention: mention ?? this.mention,
