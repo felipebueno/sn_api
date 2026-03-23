@@ -753,6 +753,45 @@ final class SNApiClient {
     return posts.first;
   }
 
+  Future<String> setName(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('name is required');
+    }
+
+    final response = await _dio.post(
+      '$_baseUrl/api/graphql',
+      data: jsonEncode(
+        GqlBody(
+          operationName: 'SetName',
+          variables: {'name': trimmed},
+          query: '''
+            mutation SetName(\$name: String!) {
+              setName(name: \$name)
+            }
+          ''',
+        ),
+      ),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Error setting name: ${response.statusCode}');
+    }
+
+    final errors = response.data?['errors'];
+    if (errors != null && errors is List && errors.isNotEmpty) {
+      final errorMsg = errors[0]?['message'] ?? 'Unknown GraphQL error';
+      throw Exception(errorMsg);
+    }
+
+    final result = response.data?['data']?['setName'] as String?;
+    if (result == null || result.isEmpty) {
+      throw Exception('Failed to set nym');
+    }
+
+    return result;
+  }
+
   Future<bool> isNymAvailable(String nym) async {
     final trimmed = nym.trim();
     if (trimmed.isEmpty) {
