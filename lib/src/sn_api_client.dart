@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:nostr/nostr.dart';
 
 import 'logger.dart';
 import 'models/notification_result.dart';
@@ -833,6 +834,131 @@ final class SNApiClient {
   // #endregion Profile
 
   // #region Auth
+  Future<String> createAuthChallenge() async {
+    final response = await _dio.post(
+      '$_baseUrl/api/graphql',
+      data: jsonEncode(
+        GqlBody(
+          operationName: 'CreateAuth',
+          variables: const {},
+          query: '''
+            mutation CreateAuth {
+              createAuth {
+                k1
+              }
+            }
+          ''',
+        ),
+      ),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Error creating auth challenge: ${response.statusCode}');
+    }
+
+    final errors = response.data?['errors'];
+    if (errors != null && errors is List && errors.isNotEmpty) {
+      final errorMsg = errors[0]?['message'] ?? 'Unknown GraphQL error';
+      throw Exception(errorMsg);
+    }
+
+    final k1 = response.data?['data']?['createAuth']?['k1'] as String?;
+    if (k1 == null || k1.isEmpty) {
+      throw Exception('Missing auth challenge');
+    }
+
+    return k1;
+  }
+
+  Future<Session?> loginWithNostrPrivateKey({
+    required String privateKey,
+    String? callbackUrl,
+  }) async {
+    final trimmed = privateKey.trim();
+    if (trimmed.isEmpty) return null;
+
+    try {
+      final k1 = await createAuthChallenge();
+      final event = Event.from(
+        kind: 27235,
+        tags: [
+          ['challenge', k1],
+          ['u', _baseUrl],
+          ['method', 'GET'],
+        ],
+        content: 'Stacker News Authentication',
+        privkey: trimmed,
+      );
+
+      final csrfResponse = await _dio.get(
+        '$_baseUrl/api/auth/csrf',
+        options: Options(headers: {'x-csrf-token': '1'}),
+      );
+      if (csrfResponse.statusCode != 200) return null;
+      final csrfToken = csrfResponse.data?['csrfToken'] as String?;
+      if (csrfToken == null || csrfToken.isEmpty) return null;
+
+      final finalCallbackUrl = callbackUrl ?? '$_baseUrl/';
+      final formData =
+          'event=${Uri.encodeComponent(jsonEncode(event.toJson()))}'
+          '&callbackUrl=${Uri.encodeComponent(finalCallbackUrl)}'
+          '&multiAuth=false'
+          '&csrfToken=${Uri.encodeComponent(csrfToken)}'
+          '&json=true';
+
+      final response = await _dio.post(
+        '$_baseUrl/api/auth/callback/nostr',
+        data: formData,
+        options: Options(
+          contentType: 'application/x-www-form-urlencoded',
+          headers: {
+            'origin': _baseUrl,
+            'referer':
+                '$_baseUrl/login?type=nostr&callbackUrl=${Uri.encodeComponent(finalCallbackUrl)}',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+          },
+          followRedirects: false,
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 302) {
+        return null;
+      }
+
+      final sessionResponse = await _dio.get(
+        '$_baseUrl/api/auth/session',
+        options: Options(headers: {'Accept': 'application/json'}),
+      );
+      if (sessionResponse.statusCode != 200) return null;
+
+      final data = sessionResponse.data;
+      if (data == null || (data is Map && data.isEmpty)) return null;
+
+      await _storage.set('session', jsonEncode(data));
+      return Session.fromJson(data);
+    } catch (e) {
+      _logger.error('Nostr login failed: ${e.toString()}', e);
+      return null;
+    }
+  }
+
+  Future<({Session? session, String privateKey, String publicKey})>
+  loginWithGeneratedNostrKey({String? callbackUrl}) async {
+    final keychain = Keychain.generate();
+    final session = await loginWithNostrPrivateKey(
+      privateKey: keychain.private,
+      callbackUrl: callbackUrl,
+    );
+    return (
+      session: session,
+      privateKey: keychain.private,
+      publicKey: keychain.public,
+    );
+  }
+
   Future<Session?> loginWithMagicCode({
     required String email,
     required String magicCode,
