@@ -24,13 +24,10 @@ final class SNApiClient {
   final String _baseUrl;
   late final Dio _dio;
 
-  SNApiClient({
-    SnStorage? storage,
-    SnLogger? logger,
-    String? baseUrl,
-  })  : _storage = storage ?? InMemoryStorage(),
-        _logger = logger ?? SnLogger(),
-        _baseUrl = baseUrl ?? _defaultBaseUrl {
+  SNApiClient({SnStorage? storage, SnLogger? logger, String? baseUrl})
+    : _storage = storage ?? InMemoryStorage(),
+      _logger = logger ?? SnLogger(),
+      _baseUrl = baseUrl ?? _defaultBaseUrl {
     _dio = Dio(
       BaseOptions(
         baseUrl: '$_baseUrl/_next/data',
@@ -147,16 +144,19 @@ final class SNApiClient {
         return await _fetchNotifications();
       }
 
-      final sortVars = _getSortVariables(sort, type: type, by: by, when: when, from: from, to: to);
+      final sortVars = _getSortVariables(
+        sort,
+        type: type,
+        by: by,
+        when: when,
+        from: from,
+        to: to,
+      );
       final body = jsonDecode(
         jsonEncode(
           GqlBody(
             operationName: 'SubItems',
-            variables: {
-              'includeComments': false,
-              'sub': subName,
-              ...sortVars,
-            },
+            variables: {'includeComments': false, 'sub': subName, ...sortVars},
             query:
                 '''\n            fragment SubFields on Sub {\n              name\n              postTypes\n              allowFreebies\n              rankingType\n              billingType\n              billingCost\n              billingAutoRenew\n              billedLastAt\n              billPaidUntil\n              baseCost\n              userId\n              desc\n              status\n              meMuteSub\n              meSubscription\n              nsfw\n              __typename\n            }\n\n            fragment SubFullFields on Sub {\n              ...SubFields\n              user {\n                name\n                id\n                optional {\n                  streak\n                  __typename\n                }\n                __typename\n              }\n              __typename\n            }\n\n            fragment ItemFields on Item {\n              id\n              parentId\n              createdAt\n              deletedAt\n              title\n              url\n              user {\n                id\n                name\n                optional {\n                  streak\n                  __typename\n                }\n                meMute\n                __typename\n              }\n              sub {\n                name\n                userId\n                meMuteSub\n                meSubscription\n                nsfw\n                __typename\n              }\n              otsHash\n              position\n              sats\n              boost\n              bounty\n              bountyPaidTo\n              noteId\n              path\n              upvotes\n              meSats\n              meDontLikeSats\n              meBookmark\n              meSubscription\n              meForward\n              freebie\n              bio\n              ncomments\n              commentSats\n              lastCommentAt\n              isJob\n              company\n              location\n              remote\n              subName\n              pollCost\n              pollExpiresAt\n              status\n              uploadId\n              mine\n              imgproxyUrls\n              rel\n              __typename\n            }\n\n            fragment CommentItemExtFields on Item {\n              text\n              root {\n                id\n                title\n                bounty\n                bountyPaidTo\n                subName\n                sub {\n                  name\n                  userId\n                  meMuteSub\n                  __typename\n                }\n                user {\n                  name\n                  optional {\n                    streak\n                    __typename\n                  }\n                  id\n                  __typename\n                }\n                __typename\n              }\n              __typename\n            }\n\n            query SubItems(\$sub: String, \$sort: String, \$cursor: String, \$type: String, \$name: String, \$when: String, \$from: String, \$to: String, \$by: String, \$limit: Limit, \$includeComments: Boolean = false) {\n              sub(name: \$sub) {\n                ...SubFullFields\n                __typename\n              }\n              items(\n                sub: \$sub\n                sort: \$sort\n                cursor: \$cursor\n                type: \$type\n                name: \$name\n                when: \$when\n                from: \$from\n                to: \$to\n                by: \$by\n                limit: \$limit\n              ) {\n                cursor\n                items {\n                  ...ItemFields\n                  ...CommentItemExtFields @include(if: \$includeComments)\n                  position\n                  __typename\n                }\n                pins {\n                  ...ItemFields\n                  ...CommentItemExtFields @include(if: \$includeComments)\n                  position\n                  __typename\n                }\n                __typename\n              }\n            }\n          ''',
           ),
@@ -166,10 +166,7 @@ final class SNApiClient {
       _logger.info('[API] POST $_baseUrl/api/graphql');
       _logger.debug('[API] Request body: ${jsonEncode(body)}');
 
-      final response = await _dio.post(
-        '$_baseUrl/api/graphql',
-        data: body,
-      );
+      final response = await _dio.post('$_baseUrl/api/graphql', data: body);
 
       _logger.info('[API] Response status: ${response.statusCode}');
       _logger.debug('[API] Response data: ${jsonEncode(response.data)}');
@@ -201,13 +198,17 @@ final class SNApiClient {
 
     final data = responseData['data'];
     if (data == null) {
-      _logger.error('[API] ERROR: Missing data field. Full response: ${jsonEncode(responseData)}');
+      _logger.error(
+        '[API] ERROR: Missing data field. Full response: ${jsonEncode(responseData)}',
+      );
       throw Exception('Invalid response: missing data field');
     }
 
     final itemsData = data['items'];
     if (itemsData == null) {
-      _logger.error('[API] ERROR: Missing items field. Data keys: ${data.keys}');
+      _logger.error(
+        '[API] ERROR: Missing items field. Data keys: ${data.keys}',
+      );
       throw Exception('Invalid response: missing items field');
     }
 
@@ -247,14 +248,19 @@ final class SNApiClient {
     DateTime? to,
   }) async {
     try {
-      final sortVars = _getSortVariables(sort, type: type, by: by, when: when, from: from, to: to);
+      final sortVars = _getSortVariables(
+        sort,
+        type: type,
+        by: by,
+        when: when,
+        from: from,
+        to: to,
+      );
       final body = jsonDecode(
         jsonEncode(
           GqlBody(
             operationName: 'TopItems',
-            variables: {
-              ...sortVars,
-            },
+            variables: {...sortVars},
             query: '''
               fragment ItemFields on Item {
                 id
@@ -343,10 +349,7 @@ final class SNApiClient {
       _logger.info('[API] POST $_baseUrl/api/graphql (home timeline)');
       _logger.debug('[API] Request body: ${jsonEncode(body)}');
 
-      final response = await _dio.post(
-        '$_baseUrl/api/graphql',
-        data: body,
-      );
+      final response = await _dio.post('$_baseUrl/api/graphql', data: body);
 
       _logger.info('[API] Response status: ${response.statusCode}');
       _logger.debug('[API] Response data: ${jsonEncode(response.data)}');
@@ -411,7 +414,14 @@ final class SNApiClient {
     }
 
     try {
-      final sortVars = _getSortVariables(sort, type: type, by: by, when: when, from: from, to: to);
+      final sortVars = _getSortVariables(
+        sort,
+        type: type,
+        by: by,
+        when: when,
+        from: from,
+        to: to,
+      );
       final body = jsonDecode(
         jsonEncode(
           GqlBody(
@@ -457,10 +467,7 @@ final class SNApiClient {
       _logger.info('[API] POST $_baseUrl/api/graphql (pagination)');
       _logger.debug('[API] Request body: ${jsonEncode(body)}');
 
-      final response = await _dio.post(
-        '$_baseUrl/api/graphql',
-        data: body,
-      );
+      final response = await _dio.post('$_baseUrl/api/graphql', data: body);
 
       _logger.info('[API] Response status: ${response.statusCode}');
       _logger.debug('[API] Response data: ${jsonEncode(response.data)}');
@@ -591,7 +598,9 @@ final class SNApiClient {
   Future<User> fetchProfile(String userName) async {
     String? currCommit = await _getCurrBuildId();
 
-    final response = await _dio.get('/$currCommit/$userName.json?name=$userName');
+    final response = await _dio.get(
+      '/$currCommit/$userName.json?name=$userName',
+    );
 
     if (response.statusCode == 200) {
       return _parseProfile(response.data);
@@ -600,7 +609,9 @@ final class SNApiClient {
 
       currCommit = await _getCurrBuildId();
 
-      final retryResponse = await _dio.get('/$currCommit/$userName.json?name=$userName');
+      final retryResponse = await _dio.get(
+        '/$currCommit/$userName.json?name=$userName',
+      );
 
       if (retryResponse.statusCode == 200) {
         return _parseProfile(retryResponse.data);
@@ -618,6 +629,167 @@ final class SNApiClient {
     final userMap = data['user'] as Map<String, dynamic>;
 
     return User.fromJson(userMap);
+  }
+
+  Future<List<Post>> fetchUserPosts(
+    String userName, {
+    String type = 'posts',
+    int limit = 10,
+    bool includeComments = false,
+    String? sub,
+    String? when,
+    DateTime? from,
+    DateTime? to,
+    String? by,
+  }) async {
+    final response = await _dio.post(
+      '$_baseUrl/api/graphql',
+      data: jsonEncode(
+        GqlBody(
+          operationName: 'UserWithItems',
+          variables: {
+            'name': userName,
+            'sub': sub,
+            'type': type,
+            'when': when,
+            'from': from?.toIso8601String(),
+            'to': to?.toIso8601String(),
+            'by': by,
+            'limit': limit,
+            'includeComments': includeComments,
+          },
+          query: '''
+            query UserWithItems(
+              \$name: String!,
+              \$sub: String,
+              \$cursor: String,
+              \$type: String,
+              \$when: String,
+              \$from: String,
+              \$to: String,
+              \$by: String,
+              \$limit: Limit,
+              \$includeComments: Boolean = false
+            ) {
+              user(name: \$name) {
+                id
+                name
+              }
+              items(
+                sub: \$sub,
+                sort: "user",
+                cursor: \$cursor,
+                type: \$type,
+                name: \$name,
+                when: \$when,
+                from: \$from,
+                to: \$to,
+                by: \$by,
+                limit: \$limit
+              ) {
+                cursor
+                items {
+                  id
+                  parentId
+                  createdAt
+                  title
+                  url
+                  text
+                  sats
+                  upvotes
+                  ncomments
+                  subName
+                  path
+                  user {
+                    id
+                    name
+                  }
+                  root @include(if: \$includeComments) {
+                    id
+                    title
+                    subName
+                    user {
+                      id
+                      name
+                    }
+                  }
+                  __typename
+                }
+              }
+            }
+          ''',
+        ),
+      ),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Error fetching user posts: ${response.statusCode}');
+    }
+
+    final errors = response.data?['errors'];
+    if (errors != null && errors is List && errors.isNotEmpty) {
+      final errorMsg = errors[0]?['message'] ?? 'Unknown GraphQL error';
+      throw Exception(errorMsg);
+    }
+
+    final items = response.data?['data']?['items']?['items'] as List? ?? [];
+    return items
+        .map((item) => Post.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Post?> fetchLatestPostByUser(
+    String userName, {
+    String type = 'posts',
+    String? sub,
+  }) async {
+    final posts = await fetchUserPosts(
+      userName,
+      type: type,
+      sub: sub,
+      limit: 1,
+    );
+    if (posts.isEmpty) return null;
+    return posts.first;
+  }
+
+  Future<bool> isNymAvailable(String nym) async {
+    final trimmed = nym.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('nym is required');
+    }
+
+    final response = await _dio.post(
+      '$_baseUrl/api/graphql',
+      data: jsonEncode(
+        GqlBody(
+          operationName: 'NymAvailability',
+          variables: {'name': trimmed},
+          query: '''
+            query NymAvailability(\$name: String!) {
+              user(name: \$name) {
+                id
+              }
+            }
+          ''',
+        ),
+      ),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Error checking nym availability: ${response.statusCode}',
+      );
+    }
+
+    final errors = response.data?['errors'];
+    if (errors != null && errors is List && errors.isNotEmpty) {
+      final errorMsg = errors[0]?['message'] ?? 'Unknown GraphQL error';
+      throw Exception(errorMsg);
+    }
+
+    final user = response.data?['data']?['user'];
+    return user == null;
   }
   // #endregion Profile
 
@@ -652,7 +824,9 @@ final class SNApiClient {
         ),
       );
 
-      final location = callbackResponse.headers.value(HttpHeaders.locationHeader);
+      final location = callbackResponse.headers.value(
+        HttpHeaders.locationHeader,
+      );
       if (location == null) {
         _logger.error('Error validating token: No redirect location');
         return null;
@@ -660,7 +834,9 @@ final class SNApiClient {
 
       if (location.contains('/api/auth/error?error=Verification')) {
         final sessionData = await _storage.getString('session');
-        if (sessionData == null || sessionData == 'null' || sessionData == '{}') {
+        if (sessionData == null ||
+            sessionData == 'null' ||
+            sessionData == '{}') {
           return null;
         }
 
@@ -684,18 +860,15 @@ final class SNApiClient {
         ),
       );
 
-      if (response.data is String && response.data.contains('This magic link has expired')) {
+      if (response.data is String &&
+          response.data.contains('This magic link has expired')) {
         _logger.warning('This magic link has expired');
         return null;
       }
 
       final sessionResponse = await _dio.get(
         '$_baseUrl/api/auth/session',
-        options: Options(
-          headers: {
-            'Accept': 'application/json',
-          },
-        ),
+        options: Options(headers: {'Accept': 'application/json'}),
       );
 
       if (sessionResponse.statusCode != 200) {
@@ -706,7 +879,9 @@ final class SNApiClient {
       }
 
       if (sessionResponse.data == null || sessionResponse.data.isEmpty) {
-        _logger.error('Error validating token: Empty session data: ${sessionResponse.data}');
+        _logger.error(
+          'Error validating token: Empty session data: ${sessionResponse.data}',
+        );
         return null;
       }
 
@@ -722,9 +897,7 @@ final class SNApiClient {
   Future<bool> requestMagicToken(String email) async {
     final csrfResponse = await _dio.get(
       '$_baseUrl/api/auth/csrf',
-      options: Options(
-        headers: {'x-csrf-token': '1'},
-      ),
+      options: Options(headers: {'x-csrf-token': '1'}),
     );
 
     if (csrfResponse.statusCode != 200) {
@@ -748,7 +921,8 @@ final class SNApiClient {
         contentType: 'application/x-www-form-urlencoded',
         headers: {
           'origin': _baseUrl,
-          'referer': '$_baseUrl/login?callbackUrl=${Uri.encodeComponent('$_baseUrl/')}',
+          'referer':
+              '$_baseUrl/login?callbackUrl=${Uri.encodeComponent('$_baseUrl/')}',
           'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138"',
           'sec-ch-ua-mobile': '?0',
           'sec-ch-ua-platform': '"Linux"',
@@ -808,7 +982,9 @@ final class SNApiClient {
   Future<NotificationResult> fetchMoreNotifications() async {
     final cursor = await _storage.getString('notifications-cursor');
     if (cursor == null) {
-      throw Exception('Error fetching more: no cursor stored for "notifications"');
+      throw Exception(
+        'Error fetching more: no cursor stored for "notifications"',
+      );
     }
     return await _fetchNotificationsRaw(cursor: cursor);
   }
@@ -825,7 +1001,8 @@ final class SNApiClient {
       buildId = await _getCurrBuildId();
     }
 
-    final url = '/$buildId/notifications.json${cursor != null ? '?cursor=$cursor' : ''}';
+    final url =
+        '/$buildId/notifications.json${cursor != null ? '?cursor=$cursor' : ''}';
     _logger.info('[API] GET $url');
 
     final response = await _dio.get(url);
@@ -835,7 +1012,8 @@ final class SNApiClient {
     } else if (response.statusCode == 404) {
       await _fetchAndSaveCurrBuildId();
       buildId = await _getCurrBuildId();
-      final retryUrl = '/$buildId/notifications.json${cursor != null ? '?cursor=$cursor' : ''}';
+      final retryUrl =
+          '/$buildId/notifications.json${cursor != null ? '?cursor=$cursor' : ''}';
       final retryResponse = await _dio.get(retryUrl);
 
       if (retryResponse.statusCode == 200) {
@@ -859,7 +1037,9 @@ final class SNApiClient {
     final cursor = data['cursor']?.toString();
     final lastCheckedRaw = data['lastChecked']?.toString();
 
-    _logger.debug('[API] Extracted ${items.length} notifications, lastChecked=$lastCheckedRaw');
+    _logger.debug(
+      '[API] Extracted ${items.length} notifications, lastChecked=$lastCheckedRaw',
+    );
 
     if (cursor != null) {
       await _storage.set('notifications-cursor', cursor);
@@ -898,10 +1078,7 @@ final class SNApiClient {
       data: jsonEncode(
         GqlBody(
           operationName: 'Act',
-          variables: {
-            'id': id,
-            'sats': sats,
-          },
+          variables: {'id': id, 'sats': sats},
           query: '''
             mutation Act(\$id: ID!, \$sats: Int!) {
               act(id: \$id, sats: \$sats) {
@@ -943,12 +1120,7 @@ final class SNApiClient {
       data: jsonEncode(
         GqlBody(
           operationName: 'upsertDiscussion',
-          variables: {
-            'sub': sub,
-            'title': title,
-            'text': text,
-            'forward': [],
-          },
+          variables: {'sub': sub, 'title': title, 'text': text, 'forward': []},
           query: '''
             mutation upsertDiscussion(
               \$sub: String
@@ -988,7 +1160,11 @@ final class SNApiClient {
         throw Exception(error);
       }
 
-      return Post.fromJson(response.data);
+      final item = response.data['data']?['upsertDiscussion'];
+      if (item is Map<String, dynamic>) {
+        return Post.fromJson(item);
+      }
+      return null;
     }
 
     throw Exception('Failed to post discussion');
@@ -1002,18 +1178,11 @@ final class SNApiClient {
 
     final response = await _dio.post(
       '$_baseUrl/api/graphql',
-      options: Options(
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      ),
+      options: Options(headers: {'Content-Type': 'application/json'}),
       data: jsonEncode(
         GqlBody(
           operationName: 'upsertComment',
-          variables: {
-            'parentId': parentId,
-            'text': text,
-          },
+          variables: {'parentId': parentId, 'text': text},
           query: '''
             mutation upsertComment(\$parentId: ID!, \$text: String!) {
               upsertComment(parentId: \$parentId, text: \$text) {
@@ -1034,7 +1203,11 @@ final class SNApiClient {
         throw Exception(error);
       }
 
-      return Post.fromJson(response.data);
+      final item = response.data['data']?['upsertComment'];
+      if (item is Map<String, dynamic>) {
+        return Post.fromJson(item);
+      }
+      return null;
     }
 
     throw Exception('Failed to create comment');
@@ -1086,12 +1259,15 @@ final class SNApiClient {
         return [];
       }
 
-      return subsData.map((sub) => Sub.fromJson(sub as Map<String, dynamic>)).toList();
+      return subsData
+          .map((sub) => Sub.fromJson(sub as Map<String, dynamic>))
+          .toList();
     } catch (e, st) {
       _logger.error('Error fetching active subs', e, st);
       return [];
     }
   }
+
   // #endregion Subs
 }
 
@@ -1100,11 +1276,7 @@ class GqlBody {
   final String? query;
   final Map<String, dynamic>? variables;
 
-  GqlBody({
-    this.operationName,
-    this.query,
-    this.variables,
-  });
+  GqlBody({this.operationName, this.query, this.variables});
 
   Map<String, dynamic> toJson() => {
     'operationName': operationName,
