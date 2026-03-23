@@ -5,12 +5,12 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 
+import 'logger.dart';
 import 'models/notification_result.dart';
 import 'models/post.dart';
 import 'models/session.dart';
 import 'models/sub.dart';
 import 'models/user.dart';
-import 'logger.dart';
 import 'storage.dart';
 
 const String _defaultBaseUrl = String.fromEnvironment(
